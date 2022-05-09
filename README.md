@@ -1,15 +1,5 @@
-# Basic Sample Hardhat Project
+# Categorizable Nft
 
-This project demonstrates a basic Hardhat use case. It comes with a sample contract, a test for that contract, a sample script that deploys that contract, and an example of a task implementation, which simply lists the available accounts.
-
-Try running some of the following tasks:
-
-```shell
-npx hardhat accounts
-npx hardhat compile
-npx hardhat clean
-npx hardhat test
-npx hardhat node
-node scripts/sample-script.js
-npx hardhat help
-```
+Assume that you want to release a set of NFT, while there's a several series of your NFT, such as collection, poap, consumable token and etc.
+Now you need to devide your NFT into several categories, correspond the NftClass of the contract.
+There still are lot of places to be consummate and optimize.

@@ -1,4 +1,7 @@
 // SPDX-License-Identifier: MIT
+// NftClass Template Contract v0.0.1
+// Creator: Fox
+
 pragma solidity ^0.8.4;
 
 import "@openzeppelin/contracts/access/Ownable.sol";
@@ -9,17 +12,35 @@ import "@openzeppelin/contracts/utils/Strings.sol";
 import "@openzeppelin/contracts/utils/introspection/ERC165.sol";
 import "hardhat/console.sol";
 
-contract NftTemplate is ERC721, Ownable {
+/**
+ * @dev Assume that you want to release a set of NFT, while there's a several
+ * series of your NFT, such as collection, poap, consumable token and etc.
+ * Now you need to devide your NFT into several categories, correspond the NftClass of the contract
+ * 
+ * There still are lot of places to be consummate and optimize
+ */
+
+contract CategorizableNft is ERC721, Ownable {
     struct NftClass {
+        // determine if token could be transfered
         bool transferable;
+        // determine if token could be minted again by the one has minted
         bool mintable;
+        // determine if toke could be burned
         bool burnable;
+        // determine if the metadata of class can be modified
         bool frozen;
+        // owner of the class
         address owner;
+        // the next token id of the class
         uint64 currentIndex;
+        // the amount of token has been burned
         uint64 burnedAmount;
+        // the amount of token can be minted per transaction
         uint64 maxPerTx;
+        // total amount of token
         uint64 maxSupply;
+        // the price of one token
         uint128 price;
         // Mapping owner address to token count
         mapping(address => uint256) balances;
@@ -35,13 +56,14 @@ contract NftTemplate is ERC721, Ownable {
     // Mapping token ID to Class Id
     mapping(uint256 => uint256) private _tokenClass;
 
-    constructor(
-        string memory _tokenName,
-        string memory _tokenSymbol
-    ) ERC721(_tokenName, _tokenSymbol) {
-        
-    }
+    constructor(string memory _tokenName, string memory _tokenSymbol)
+        ERC721(_tokenName, _tokenSymbol)
+    {}
 
+    /**
+     * add a nft class
+     * the currentIndex, burnedAmount will be set to a default value 0
+     */
     function addNftClass(
         bool _transferable,
         bool _mintable,
@@ -65,21 +87,35 @@ contract NftTemplate is ERC721, Ownable {
         class.price = _price;
     }
 
+    // revert when caller is not the owner of nft class
     modifier isOwnerOfClass(uint256 _classId) {
-        require(_classData[_classId].owner == msg.sender);
+        require(_classData[_classId].owner == msg.sender, "Not the owner of the class!");
         _;
     }
 
+    // revert when someone still want to change the metadata of a nft class which has been frozen
     modifier isClassFrozen(uint256 _classId) {
         require(!_classData[_classId].frozen, "Class has been frozen!");
         _;
     }
 
+    // revert when the classId doesn't exist
     modifier validClassId(uint256 _classId) {
         require(_classId < nextClassId, "Invalid class id!");
         _;
     }
 
+    // revert when the tokenId doesn't exist
+    modifier validTokenId(uint256 _tokenId) {
+        require(_tokenId < nextTokenId, "Invalid token id!");
+        _;
+    }
+
+    /**
+     * Check if the nft has been sold out
+     * Check if the amount of minting is exceed the limit
+     * Check if the amount of ether is sent correctly
+     */
     modifier mintCompliance(uint256 _mintAmount, uint256 _classId) {
         require(
             totalSupplyOfClass(_classId) + _mintAmount <=
@@ -97,18 +133,30 @@ contract NftTemplate is ERC721, Ownable {
         _;
     }
 
+    /**
+     *@param _mintAmount the amount of nft want to be minted
+     *@param _classId which class of nft want to mint
+     */
     function mint(uint256 _mintAmount, uint256 _classId)
         public
         payable
         validClassId(_classId)
         mintCompliance(_mintAmount, _classId)
     {
+        if (getBalancesOfClass(msg.sender, _classId) > 0) {
+            require(_classData[_classId].mintable, "it's not mintable for you!");
+        }
         for (uint256 i = 0; i < _mintAmount; i++) {
+            _tokenClass[nextTokenId] = _classId;
             _safeMint(msg.sender, nextTokenId++);
         }
+        _classData[_classId].balances[msg.sender] += _mintAmount;
         _classData[_classId].currentIndex += uint64(_mintAmount);
     }
 
+    /**
+     *@return totalSupply the summation of all classes of nfts (currently minted)
+     */
     function totalSupply() public view returns (uint256) {
         uint256 total;
         unchecked {
@@ -122,6 +170,9 @@ contract NftTemplate is ERC721, Ownable {
         }
     }
 
+    /**
+     *@return totalSupplyOfClass current supply of the specified class
+     */
     function totalSupplyOfClass(uint256 _classId)
         public
         view
@@ -146,7 +197,11 @@ contract NftTemplate is ERC721, Ownable {
         );
         _classData[_classId].owner = _newOwner;
     }
-
+  
+    /**
+     *@notice once class is frozen, not one could 'unfreeze', 
+     *  which means it would be frozen permanently
+     */
     function freezeClass(uint256 _classId)
         external
         validClassId(_classId)
@@ -218,57 +273,49 @@ contract NftTemplate is ERC721, Ownable {
         return _classData[_classId].currentIndex;
     }
 
-    function getMaxSupplyOfClass(uint256 _classId)
+    function getClassOfToken(uint256 _tokenId)
+        external
+        view
+        validTokenId(_tokenId)
+        returns (uint256)
+    {
+        return _tokenClass[_tokenId];
+    }
+
+    function getClassData(uint256 _classId)
+        external
+        view
+        validClassId(_classId)
+        returns (
+            bool transferable,
+            bool mintalbe,
+            bool burnable,
+            bool frozen,
+            address owner,
+            uint64 maxPerTx,
+            uint64 maxSupply,
+            uint128 price
+        )
+    {
+        NftClass storage class = _classData[_classId];
+        return (
+            class.transferable,
+            class.mintable,
+            class.burnable,
+            class.frozen,
+            class.owner,
+            class.maxPerTx,
+            class.maxSupply,
+            class.price
+        );
+    }
+
+    function getBalancesOfClass(address _owner, uint256 _classId)
         public
         view
         validClassId(_classId)
         returns (uint256)
     {
-        return _classData[_classId].maxSupply;
-    }
-
-    function getPriceOfClass(uint256 _classId)
-        public
-        view
-        validClassId(_classId)
-        returns (uint256)
-    {
-        return _classData[_classId].price;
-    }
-
-    function isTransferable(uint256 _classId)
-        public
-        view
-        validClassId(_classId)
-        returns (bool)
-    {
-        return _classData[_classId].transferable;
-    }
-
-    function isMintable(uint256 _classId)
-        public
-        view
-        validClassId(_classId)
-        returns (bool)
-    {
-        return _classData[_classId].mintable;
-    }
-
-    function isBurnable(uint256 _classId)
-        public
-        view
-        validClassId(_classId)
-        returns (bool)
-    {
-        return _classData[_classId].burnable;
-    }
-
-    function isFrozen(uint256 _classId)
-        public
-        view
-        validClassId(_classId)
-        returns (bool)
-    {
-        return _classData[_classId].frozen;
+        return _classData[_classId].balances[_owner];
     }
 }
